@@ -1,4 +1,4 @@
-# ROMPatch
+# ROMPatch & ROMDump
 Patcher for IPLROM 1.6 from XEiJ
 
 　Makoto Kamada さまの作られた XEiJ (X68000 Emulator in JAVA) より生成される  
