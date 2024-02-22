@@ -1,19 +1,21 @@
 ;===============================================================================
 ;
-; ROMPatch.x version 1.22 by みゆ (miyu rose)
+; ROMPatch.x version 1.24 by みゆ (miyu rose)
 ;
 ;  ROMPatch.x ([options]) [filename] ([modelname])
 ;   [options]
-;    -d|u     : モデル名|機種ｺｰﾄﾞ の情報を削除します
-;    -0|3     : 機種ｺｰﾄﾞ を 初代|X68030 にします
-;    -A|E|P   : 機種ｺｰﾄﾞ を ACE|EXPERT|PRO にします
-;    -S|X|C   : 機種ｺｰﾄﾞ を SUPER|XVI|Compact にします
-;    -I|II    : 機種ｺｰﾄﾞ に I|II を付加します
-;    -HD|N    : 機種ｺｰﾄﾞ に HD を付加|除去します
-;    -O|G|B|T : 機種ｺｰﾄﾞ の色を ｵﾌｨｽｸﾞﾚｰ|ｸﾞﾚｰ|ﾌﾞﾗｯｸ|ﾁﾀﾝﾌﾞﾗｯｸ にします
-;    -1M|2M|4M: 指定の標準メモリ/STD起動にします (for XEiJ IPLROM)
-;    -x       : 起動ロゴを X680x0 にします (for XEiJ IPLROM)
-;    -h|?     : ヘルプを表示します
+;    -d|u           : モデル名|機種ｺｰﾄﾞ の情報を削除します
+;    -0|3           : 機種ｺｰﾄﾞ を 初代|X68030 にします
+;    -A|E|P         : 機種ｺｰﾄﾞ を ACE|EXPERT|PRO にします
+;    -S|X|C         : 機種ｺｰﾄﾞ を SUPER|XVI|Compact にします
+;    -I|II          : 機種ｺｰﾄﾞ に I|II を付加します
+;    -HD|N          : 機種ｺｰﾄﾞ に HD を付加|除去します
+;    -O|G|B|T       : 機種ｺｰﾄﾞ の色を ｵﾌｨｽｸﾞﾚｰ|ｸﾞﾚｰ|ﾌﾞﾗｯｸ|ﾁﾀﾝﾌﾞﾗｯｸ にします
+;    -eR|eJ|eG|eM|eZ: ｴﾐｭﾚｰﾀｺｰﾄﾞ を 実機|XEiJ|XM6 TypeG|MiSTer|Z にします
+;    -eN            : ｴﾐｭﾚｰﾀｺｰﾄﾞ を 設定なし にします
+;    -1M|2M|4M|12M  : 指定の標準メモリ/STD起動にします (for XEiJ IPLROM)
+;    -x             : 起動ロゴを X680x0 にします (for XEiJ IPLROM)
+;    -h|?           : ヘルプを表示します
 ;   [filename]
 ;    パッチをあてる IPLROM ($fe0000-$ffffff) または
 ;    X68KROM ($f00000-$ffffff) のダンプファイルです
@@ -23,10 +25,18 @@
 ;
 ;
 ;  [ｴﾐｭﾚｰﾀｺｰﾄﾞ(仮)] $00FFFFFE
+;  実機            = $00
+;  XEiJ            = $01
+;  XM6 TypeG       = $02
+;  X68000_MiSTer   = $03
+;  X68000 Z        = $0f
+;  設定無し        = $FF
+;  ※これらの値は仮です。将来変更となる可能性があります
 ;
 ;  [機種ｺｰﾄﾞ] $00FFFFFF
 ;  X68000          = 0b00000000;
 ;  X68030          = 0b10000000;
+;  設定無し        = 0b11111111;
 ;
 ;  ACE             = 0b00010000;
 ;  EXPERT          = 0b00100000;
@@ -108,7 +118,7 @@ arg_option:
     cmpi.b  #'d',d0
     beq     arg_flag_delete_name       ; -d や /D は モデル名情報削除
     cmpi.b  #'u',d0
-    beq     arg_flag_unset_code        ; -u や /U は 機種ｺｰﾄﾞ情報削除
+    beq     arg_flag_unset_modelcode   ; -u や /U は 機種ｺｰﾄﾞ情報削除
     cmpi.b  #'0',d0
     beq     arg_flag_X68000            ; -0 や /0 は X68000 フラグ
     cmpi.b  #'3',d0
@@ -139,6 +149,8 @@ arg_option:
     beq     arg_flag_TitanBlack        ; -T や /T は TitanBlack フラグ
     cmpi.b  #'B',d0
     beq     arg_flag_Black             ; -B や /B は Black フラグ
+    cmpi.b  #'e',d0
+    beq     arg_flag_emulatorcode      ; -e や /e は エミュレータコード
     cmpi.b  #'1',d0
     beq     arg_flag_bootpatch1        ; -1 や /1 は 起動パッチ(1MB/STD)
     cmpi.b  #'2',d0
@@ -156,14 +168,38 @@ arg_option:
 arg_flag_bootpatch1:                   ; 1MB/STD起動
     move.b  (a2),d0                    ; 続く引数を取得
     cmpi.b  #'M',d0                    ; 前の文字とあわせて '1M' かな？
-    bne     help                       ; '1M' じゃなかったのでヘルプ表示
+    beq     @f                         ; '1M' だったので次へ
+
+    cmpi.b  #'2',d0                    ; 前の文字とあわせて '12' かな？
+    bne     help                       ; '12' じゃなかったのでヘルプ表示
+
+    addq.l  #1,a2                      ; '12' だったので引数を一文字すすめる
+    move.b  (a2),d0                    ; 続く引数を取得
+    cmpi.b  #'M',d0                    ; 前の文字とあわせて '12M' かな？
+    bne     help                       ; '12M' じゃなかったのでヘルプ表示
+    
+    addq.l  #1,a2                      ; '12M' だったので引数を一文字すすめる
+set_flag_bootpatch12:
+    move.b  #1,flag_bootpatch          ; bootpatch フラグを立てる
+    lea.l   bootpatch_00,a0
+    move.l  #$00C00000,(a0)            ; 書き込むデータを 12MB にする
+    lea.l   mes_bootpatched,a0
+    move.b  #'1',(a0)+                 ; 表示メッセージを
+    move.b  #'2',(a0)+                 ;  12MB
+    move.b  #'M',(a0)                  ;   にする
+
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
     addq.l  #1,a2                      ; '1M' だったので引数を一文字すすめる
 set_flag_bootpatch1:
     move.b  #1,flag_bootpatch          ; bootpatch フラグを立てる
     lea.l   bootpatch_00,a0
     move.l  #$00100000,(a0)            ; 書き込むデータを 1MB にする
     lea.l   mes_bootpatched,a0
-    move.b  #'1',(a0)                  ; 表示メッセージも 1MB にする
+    move.b  #'1',(a0)+                 ; 表示メッセージを
+    move.b  #'M',(a0)+                 ;  1MB
+    move.b  #'B',(a0)                  ;   にする
 
     bra     arg_option                 ; 次のオプション文字へ
 
@@ -177,7 +213,9 @@ set_flag_bootpatch2:
     lea.l   bootpatch_00,a0
     move.l  #$00200000,(a0)            ; 書き込むデータを 2MB にする
     lea.l   mes_bootpatched,a0
-    move.b  #'2',(a0)                  ; 表示メッセージも 2MB にする
+    move.b  #'2',(a0)+                 ; 表示メッセージを
+    move.b  #'M',(a0)+                 ;  2MB
+    move.b  #'B',(a0)                  ;   にする
 
     bra     arg_option                 ; 次のオプション文字へ
 
@@ -191,7 +229,9 @@ set_flag_bootpatch4:
     lea.l   bootpatch_00,a0
     move.l  #$00400000,(a0)            ; 書き込むデータを 4MB にする
     lea.l   mes_bootpatched,a0
-    move.b  #'4',(a0)                  ; 表示メッセージも 4MB にする
+    move.b  #'4',(a0)+                 ; 表示メッセージを
+    move.b  #'M',(a0)+                 ;  4MB
+    move.b  #'B',(a0)                  ;   にする
 
     bra     arg_option                 ; 次のオプション文字へ
 
@@ -209,7 +249,7 @@ arg_flag_delete_name:
 
 ;-------------------------------------------------------------------------------
 
-arg_flag_unset_code:
+arg_flag_unset_modelcode:
     clr.b   mask_modelcode
     move.b  #$ff,flag_modelcode        ; 機種ｺｰﾄﾞ情報を削除
     bra     arg_option
@@ -331,6 +371,70 @@ arg_flag_TitanBlack:
     bra     arg_option                 ; 次のオプション文字へ
 
 ;-------------------------------------------------------------------------------
+arg_flag_emulatorcode:
+    move.b  (a2),d0                    ; 続く引数を取得
+    cmpi.b  #'R',d0                    ; 前の文字とあわせて 'eR' かな？
+    bne     @f                         ; 'eR' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eR' だったので引数を一文字すすめる
+    move.b  #$00, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを 実機 に
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
+    cmpi.b  #'J',d0                    ; 前の文字とあわせて 'eJ' かな？
+    bne     @f                         ; 'eJ' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eJ' だったので引数を一文字すすめる
+    move.b  #$01, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを XEiJ に
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
+    cmpi.b  #'G',d0                    ; 前の文字とあわせて 'eG' かな？
+    bne     @f                         ; 'eG' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eG' だったので引数を一文字すすめる
+    move.b  #$01, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを XM6 TypeG に
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
+    cmpi.b  #'G',d0                    ; 前の文字とあわせて 'eG' かな？
+    bne     @f                         ; 'eG' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eG' だったので引数を一文字すすめる
+    move.b  #$02, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを XM6 TypeG に
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
+    cmpi.b  #'M',d0                    ; 前の文字とあわせて 'eM' かな？
+    bne     @f                         ; 'eM' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eM' だったので引数を一文字すすめる
+    move.b  #$03, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを XM6 TypeG に
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
+    cmpi.b  #'Z',d0                    ; 前の文字とあわせて 'eZ' かな？
+    bne     @f                         ; 'eZ' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eZ' だったので引数を一文字すすめる
+    move.b  #$04, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを Z に
+
+    andi.b  #$03,mask_modelcode
+    andi.b  #$03,flag_modelcode        ; 初代 フラグ
+    bra     set_flag_bootpatch12       ; 12M/STD機動へ
+
+@@:
+    cmpi.b  #'N',d0                    ; 前の文字とあわせて 'eN' かな？
+    bne     @f                         ; 'eN' じゃなかったので次へ
+
+    addq.l  #1,a2                      ; 'eN' だったので引数を一文字すすめる
+    move.b  #$ff, flag_emulatorcode    ; ｴﾐｭﾚｰﾀｺｰﾄﾞを 設定なし に
+    bra     arg_option                 ; 次のオプション文字へ
+
+@@:
+    bra     help
+
+;-------------------------------------------------------------------------------
 
 arg_filename:
     lea.l filename,a0                  ; ファイル名格納ポインタ
@@ -365,7 +469,6 @@ arg_modelname:
     beq     arg_end                    ; $00 だったのでこれ以上は書き込みません
     bra     @b                         ; ループ
 @@:
-    move.b  #$ff,modelname_end         ; モデル名終端まで書いたので仮終端を埋める
 
 ;-------------------------------------------------------------------------------
 
@@ -964,7 +1067,6 @@ file_check_delete_name:                ; IPLROM $0001ffe0
     cmpi.b  #$00,(a0)                  ; 次の書き込み予定は $00 かな？
     bne     @b                         ; $00 ではないのでループ
 
-    move.b  #$ff,(a0)                  ; $ff で埋める
                                        ; IPLROM $0001fffe
     bra     file_patch_modelname       ; モデル名パッチへ
 
@@ -992,7 +1094,7 @@ file_read_modelname:                   ; IPLROM $0001ffe0
     DOS     _PRINT
     addq.l  #4,sp
 
-    bra     file_read_modelcode        ; 機種ｺｰﾄﾞ 処理へ
+    bra     file_read_emulatorcode     ; 機種ｺｰﾄﾞ 処理へ
 @@:
     pea.l   mes_modelname1             ; モデル名(前文)
     DOS     _PRINT
@@ -1004,7 +1106,7 @@ file_read_modelname:                   ; IPLROM $0001ffe0
     DOS     _PRINT
     addq.l  #4,sp
 
-    bra     file_read_modelcode        ; 機種ｺｰﾄﾞ 処理へ
+    bra     file_read_emulatorcode     ; 機種ｺｰﾄﾞ 処理へ
 
 ;-------------------------------------------------------------------------------
 
@@ -1025,7 +1127,7 @@ file_modelname_deleted:
     DOS     _PRINT
     addq.l  #4,sp
 
-    bra     file_read_modelcode        ; 終了処理へ
+    bra     file_read_emulatorcode     ; 終了処理へ
 @@:
     pea.l   mes_renamed1               ; モデル名上書き成功(前文)
     DOS     _PRINT
@@ -1041,7 +1143,8 @@ file_modelname_deleted:
 
 ;-------------------------------------------------------------------------------
 
-file_read_modelcode:                   ; IPLROM $0001fffe
+file_read_emulatorcode:                ; IPLROM $0001fffe
+file_read_modelcode:                   ; 
     move.l  #$02,-(sp)                 ; 読み込むサイズ $02 Bytes
     pea.l   emulatorcode               ; 読み込みバッファ
     move.w  d1,-(sp)                   ; ファイルハンドル
@@ -1049,6 +1152,74 @@ file_read_modelcode:                   ; IPLROM $0001fffe
     lea     10(sp),sp
     or.l    d0,d0                      ; 読み込んだサイズが
     bmi     file_error_nazo            ; 負ならエラー
+
+    move.w  #1,-(sp)                   ; 現在位置から
+    move.l  #-1,-(sp)                  ; オフセット -1 Byte
+    move.w  d1,-(sp)                   ; ファイルハンドル
+    DOS     _SEEK                      ; IPLROM $0001ffff
+    addq.l  #8,sp
+    or.l    d0,d0                      ; ファイル先頭からのオフセットが
+    bmi     file_error_nazo            ; 負ならエラー
+
+file_check_emulatorcode:
+    cmpi.b  #$80,flag_emulatorcode     ; emulatorlcode をチェック
+    beq     @f                         ; 指定なしなので次へ
+
+    move.b  flag_emulatorcode,d0       ; 指定された emulatorcode を
+    move.b  d0,emulatorcode            ; 反映
+   
+file_patch_emulatorcode:               ; IPLROM $0001ffff
+    move.w  #1,-(sp)                   ; 現在位置から
+    move.l  #-1,-(sp)                  ; オフセット -1 Byte
+    move.w  d1,-(sp)                   ; ファイルハンドル
+    DOS     _SEEK                      ; IPLROM $0001fffe
+    addq.l  #8,sp
+    or.l    d0,d0                      ; ファイル先頭からのオフセットが
+    bmi     file_error_nazo            ; 負ならエラー
+
+    move.l  #$01,-(sp)                 ; 上書きサイズ $01 Bytes
+    pea.l   emulatorcode               ; 上書きデータ
+    move.w  d1,-(sp)                   ; ファイルハンドル
+    DOS     _WRITE                     ; IPLROM $0001ffff
+    lea     10(sp),sp
+    or.l    d0,d0                      ; 書き込んだサイズが
+    bmi     file_error_write           ; 負ならエラー
+
+    pea.l   mes_set_emulatorcode1      ; 機種ｺｰﾄﾞ上書き成功(前文)
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    moveq   #$00, d0
+    move.b  emulatorcode,d0            ; 機種ｺｰﾄﾞ
+    bsr     print_emulatorcode         ; 表示
+
+    pea.l   mes_set_emulatorcode2      ; 機種ｺｰﾄﾞ上書き成功(後文)
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    bra     file_check_modelcode       ; modelcode チェックへ
+
+@@:
+    cmpi.b  #$ff,emulatorcode          ; ｴﾐｭﾚｰﾀｺｰﾄﾞ は設定済？
+    bne     @f                         ; 設定されているので次へ
+
+    pea.l   mes_no_emulatorcode        ; ｴﾐｭﾚｰﾀｺｰﾄﾞ は未設定
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    bra     file_check_modelcode
+@@:
+    pea.l   mes_emulatorcode1          ; ｴﾐｭﾚｰﾀｺｰﾄﾞ(前文)
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    moveq   #$00, d0
+    move.b  emulatorcode,d0            ; ｴﾐｭﾚｰﾀｺｰﾄﾞ
+    bsr     print_emulatorcode         ; 表示
+
+    pea.l   mes_emulatorcode3          ; ｴﾐｭﾚｰﾀｺｰﾄﾞ(後文)
+    DOS     _PRINT
+    addq.l  #4,sp
 
 file_check_modelcode:
     cmpi.b  #$ff,mask_modelcode        ; modelcode のマスクをチェック
@@ -1067,6 +1238,7 @@ file_check_modelcode:
     DOS     _PRINT
     addq.l  #4,sp
 
+    moveq   #$00, d0
     move.b  modelcode,d0               ; 機種ｺｰﾄﾞ
     bsr     print_modelcode            ; 表示
 
@@ -1078,15 +1250,7 @@ file_check_modelcode:
 
 ;-------------------------------------------------------------------------------
 
-file_fix_modelcode:                    ; IPLROM $00020000
-    move.w  #1,-(sp)                   ; 現在位置から
-    move.l  #-2,-(sp)                  ; オフセット -2 Byte
-    move.w  d1,-(sp)                   ; ファイルハンドル
-    DOS     _SEEK                      ; IPLROM $0001fffe
-    addq.l  #8,sp
-    or.l    d0,d0                      ; ファイル先頭からのオフセットが
-    bmi     file_error_nazo            ; 負ならエラー
-
+file_fix_modelcode:                    ; IPLROM $0001ffff
     move.b  mask_modelcode,d0
     and.b   d0,modelcode               ; マスクして
     move.b  flag_modelcode,d0
@@ -1096,8 +1260,7 @@ file_fix_modelcode:                    ; IPLROM $00020000
     cmpi.b  #$ff,d0                    ; 未設定オプションかな？
     bne     modelcode_check            ; 未設定オプションではないので機種ｺｰﾄﾞﾁｪｯｸへ
     
-    move.b  #$ff, emulatorcode         ; ｴﾐｭﾚｰﾀｺｰﾄﾞも未設定に
-    bra     file_patch_modelcode       ; 未設定に
+    bra     file_patch_modelcode       ; 機種ｺｰﾄﾞを未設定に
 
 modelcode_check:
     andi.b  #$f4,d0
@@ -1192,8 +1355,8 @@ file_fix_TitanBlack
     andi.b  #$fc,modelcode             ; 一旦 ｵﾌｨｽｸﾞﾚｰ に初期化
     ori.b   #$02,modelcode             ; ﾁﾀﾝﾌﾞﾗｯｸ に
 file_patch_modelcode:
-    move.l  #$02,-(sp)                 ; 上書きサイズ $02 Bytes
-    pea.l   emulatorcode               ; 上書きデータ
+    move.l  #$01,-(sp)                 ; 上書きサイズ $01 Bytes
+    pea.l   modelcode                  ; 上書きデータ
     move.w  d1,-(sp)                   ; ファイルハンドル
     DOS     _WRITE                     ; IPLROM $00020000
     lea     10(sp),sp
@@ -1203,21 +1366,22 @@ file_patch_modelcode:
     cmpi.b  #$ff,modelcode             ; 機種ｺｰﾄﾞ は設定済？
     bne     @f                         ; 設定されているので次へ
 
-file_modelcode_unset:
-    pea.l   mes_modelcode_unset        ; 「機種ｺｰﾄﾞを削除しました」
+file_unset_modelcode:
+    pea.l   mes_unset_modelcode        ; 「機種ｺｰﾄﾞを削除しました」
     DOS     _PRINT
     addq.l  #4,sp
 
     bra     file_close                 ; 終了処理へ
 @@:
-    pea.l   mes_setcode1               ; 機種ｺｰﾄﾞ上書き成功(前文)
+    pea.l   mes_set_modelcode1         ; 機種ｺｰﾄﾞ上書き成功(前文)
     DOS     _PRINT
     addq.l  #4,sp
 
+    moveq   #$00, d0
     move.b  modelcode,d0               ; 機種ｺｰﾄﾞ
     bsr     print_modelcode            ; 表示
 
-    pea.l   mes_setcode2               ; 機種ｺｰﾄﾞ上書き成功(後文)
+    pea.l   mes_set_modelcode2         ; 機種ｺｰﾄﾞ上書き成功(後文)
     DOS     _PRINT
     addq.l  #4,sp
 
@@ -1264,8 +1428,74 @@ help:
 
 ;===============================================================================
 
+print_emulatorcode:                       ; ｴﾐｭﾚｰﾀｺｰﾄﾞ表示
+    bsr     printb
+
+    pea.l   mes_emulatorcode2
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    move.b  emulatorcode,d0               ; 機種ｺｰﾄﾞ
+    cmp.b   #$00,d0
+    bne     @f
+
+    pea.l   mes_Jikki
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    rts
+
+@@:
+    cmp.b   #$01,d0
+    bne     @f
+
+    pea.l   mes_XEiJ
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    rts
+
+@@:
+    cmp.b   #$02,d0
+    bne     @f
+
+    pea.l   mes_XM6TypeG
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    rts
+
+@@:
+    cmp.b   #$03,d0
+    bne     @f
+
+    pea.l   mes_MiSTer
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    rts
+
+@@:
+    cmp.b   #$04,d0
+    bne     @f
+
+    pea.l   mes_Z
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    rts
+
+@@:
+    pea.l   mes_noset
+    DOS     _PRINT
+    addq.l  #4,sp
+
+    rts
+
+;===============================================================================
+
 print_modelcode:                       ; 機種ｺｰﾄﾞ表示
-    move.b d0,-(sp)
+    move.b  d0,-(sp)
     bsr    printb
 
     pea.l  mes_modelcode2
@@ -1374,7 +1604,7 @@ printl:
     move.l  d2,-(sp)
 
     move.l  d0,d1
-    moveq.l #7,d2                      ; カウンタ
+    moveq   #7,d2                      ; カウンタ
 @@:
     rol.l   #4,d1
     move.l  d1,d0
@@ -1492,7 +1722,7 @@ flag_logopatch:
 mask_modelcode:
     .dc.b   $ff
 flag_emulatorcode:
-    .ds.b   1
+    .dc.b   $80
 flag_modelcode:
     .ds.b   1
 flag_X68KROM:
@@ -1519,9 +1749,7 @@ modelnametag:
     .dc.b   'NAME'
 modelname:
     .dc.b                   $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
-    .dc.b   $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
-modelname_end:
-    .dc.b   $00
+    .dc.b   $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00
 emulatorcode:
     .dc.b   $00
 modelcode:
@@ -1556,8 +1784,20 @@ mes_renamed1:
     .dc.b   'モデル名を [',$00
 mes_renamed2:
     .dc.b   '] に設定しました！',$0d,$0a,$00
-mes_modelcode_unset:
+mes_unset_modelcode:
     .dc.b   '機種ｺｰﾄﾞ情報を削除しました！',$0d,$0a,$0d,$0a,$00
+mes_no_emulatorcode:
+    .dc.b   'ｴﾐｭﾚｰﾀｺｰﾄﾞは 未設定 です！',$0d,$0a,$00
+mes_emulatorcode1:
+    .dc.b   'ｴﾐｭﾚｰﾀｺｰﾄﾞは $',$00
+mes_emulatorcode2:
+    .dc.b   ' - ',$00
+mes_emulatorcode3:
+    .dc.b   ' です！',$0d,$0a,$00
+mes_set_emulatorcode1:
+    .dc.b   'ｴﾐｭﾚｰﾀｺｰﾄﾞを $',$00
+mes_set_emulatorcode2:
+    .dc.b   ' に設定しました！',$0d,$0a,$00
 mes_no_modelcode:
     .dc.b   '機種ｺｰﾄﾞは 未設定 です！',$0d,$0a,$0d,$0a,$00
 mes_modelcode1:
@@ -1566,9 +1806,9 @@ mes_modelcode2:
     .dc.b   ' - ',$00
 mes_modelcode3:
     .dc.b   ' です！',$0d,$0a,$0d,$0a,$00
-mes_setcode1:
+mes_set_modelcode1:
     .dc.b   '機種ｺｰﾄﾞを $',$00
-mes_setcode2:
+mes_set_modelcode2:
     .dc.b   ' に設定しました！',$0d,$0a,$0d,$0a,$00
 mes_X68000:
     .dc.b   'X68000',$00
@@ -1598,10 +1838,22 @@ mes_TitanBlack:
     .dc.b   ' (ﾁﾀﾝﾌﾞﾗｯｸ)',$00
 mes_Black:
     .dc.b   ' (ﾌﾞﾗｯｸ)',$00
+mes_Jikki:
+    .dc.b   '実機',$00
+mes_XEiJ:
+    .dc.b   'XEiJ',$00
+mes_XM6TypeG:
+    .dc.b   'XM6 TypeG',$00
+mes_MiSTer:
+    .dc.b   'MiSTER',$00
+mes_Z:
+    .dc.b   'X68000 Z',$00
+mes_noset:
+    .dc.b   '設定なし',$00
 mes_title:
     .dc.b   'ROMPatch ',$00
 mes_version:
-    .dc.b   $f3,'v',$f3,'e',$f3,'r',$f3,'s',$f3,'i',$f3,'o',$f3,'n',$f3,' ',$f3,'1',$f3,'.',$f3,'2',$f3,'2',$00
+    .dc.b   $f3,'v',$f3,'e',$f3,'r',$f3,'s',$f3,'i',$f3,'o',$f3,'n',$f3,' ',$f3,'1',$f3,'.',$f3,'2',$f3,'4',$00
 mes_by:
     .dc.b   ' ',$f3,'b',$f3,'y ',$00
 mes_author:
@@ -1609,16 +1861,18 @@ mes_author:
 mes_help:
     .dc.b   ' ROMPatch.x ([options]) [filename] ([modelname])',$0d,$0a
     .dc.b   '  [options]',$0d,$0a
-    .dc.b   '   -d|u     : モデル名|機種ｺｰﾄﾞ の情報を削除します',$0d,$0a
-    .dc.b   '   -0|3     : 機種ｺｰﾄﾞ を 初代|X68030 にします',$0d,$0a
-    .dc.b   '   -A|E|P   : 機種ｺｰﾄﾞ を ACE|EXPERT|PRO にします',$0d,$0a
-    .dc.b   '   -S|X|C   : 機種ｺｰﾄﾞ を SUPER|XVI|Compact にします',$0d,$0a
-    .dc.b   '   -I|II    : 機種ｺｰﾄﾞ に I|II を付加します',$0d,$0a
-    .dc.b   '   -HD|N    : 機種ｺｰﾄﾞ に HD を付加|除去します',$0d,$0a
-    .dc.b   '   -O|G|B|T : 機種ｺｰﾄﾞ の色を ｵﾌｨｽｸﾞﾚｰ|ｸﾞﾚｰ|ﾌﾞﾗｯｸ|ﾁﾀﾝﾌﾞﾗｯｸ にします',$0d,$0a
-    .dc.b   '   -1M|2M|4M: 指定の標準メモリ/STD起動にします (for XEiJ IPLROM)',$0d,$0a
-    .dc.b   '   -x       : 起動ロゴを X680x0 にします (for XEiJ IPLROM)',$0d,$0a
-    .dc.b   '   -h       : ヘルプを表示します',$0d,$0a
+    .dc.b   '   -d|u           : モデル名|機種ｺｰﾄﾞ の情報を削除します',$0d,$0a
+    .dc.b   '   -0|3           : 機種ｺｰﾄﾞ を 初代|X68030 にします',$0d,$0a
+    .dc.b   '   -A|E|P         : 機種ｺｰﾄﾞ を ACE|EXPERT|PRO にします',$0d,$0a
+    .dc.b   '   -S|X|C         : 機種ｺｰﾄﾞ を SUPER|XVI|Compact にします',$0d,$0a
+    .dc.b   '   -I|II          : 機種ｺｰﾄﾞ に I|II を付加します',$0d,$0a
+    .dc.b   '   -HD|N          : 機種ｺｰﾄﾞ に HD を付加|除去します',$0d,$0a
+    .dc.b   '   -O|G|B|T       : 機種ｺｰﾄﾞ の色を ｵﾌｨｽｸﾞﾚｰ|ｸﾞﾚｰ|ﾌﾞﾗｯｸ|ﾁﾀﾝﾌﾞﾗｯｸ にします',$0d,$0a
+    .dc.b   '   -1M|2M|4M|12M  : 指定の標準メモリ/STD起動にします',$0d,$0a
+    .dc.b   '   -eR|eJ|eG|eM|eZ: ｴﾐｭﾚｰﾀｺｰﾄﾞ を 実機|XEiJ|XM6 TypeG|MiSTer|Z にします',$0d,$0a
+    .dc.b   '   -eN            : ｴﾐｭﾚｰﾀｺｰﾄﾞ を 設定なし にします',$0d,$0a
+    .dc.b   '   -x             : 起動ロゴを X680x0 にします (for XEiJ IPLROM)',$0d,$0a
+    .dc.b   '   -h             : ヘルプを表示します',$0d,$0a
     .dc.b   ' [filename]',$0d,$0a
     .dc.b   '  パッチをあてる IPLROM ($fe0000-$ffffff) または',$0d,$0a
     .dc.b   '  X68KROM ($f00000-$ffffff) のダンプファイルです',$0d,$0a
