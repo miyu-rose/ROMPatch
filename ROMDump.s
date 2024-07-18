@@ -1,24 +1,24 @@
 ;===============================================================================
 ;
-; ROMDump.x version 1.21 by �݂� (miyu rose)
+; ROMDump.x version 1.25 by みゆ (miyu rose)
 ;
 ;  ROMDump.x ([options])
 ;   [options]
-;    f : $F00000-$FFFFFF   X68KROM.DAT ���_���v���܂�
-;    c : $F00000-$FBFFFF     CGROM.DAT ���_���v���܂�
-;    3 : $FC0000-$FDFFFF     ROM30.DAT �����݂�����_���v���܂�
-;    i : $FE0000-$FFFFFF    IPLROM.DAT ���_���v���܂�
-;    n : $FC0000-$FC1FFF SCSIINROM.DAT �����݂�����_���v���܂�
-;    x : $EA0020-$EA1FFF SCSIEXROM.DAT �����݂�����_���v���܂�
-;    a : ��L�S�Ă��_���v���܂�
+;    f : $F00000-$FFFFFF   X68KROM.DAT をダンプします
+;    c : $F00000-$FBFFFF     CGROM.DAT をダンプします
+;    3 : $FC0000-$FDFFFF     ROM30.DAT が存在したらダンプします
+;    i : $FE0000-$FFFFFF    IPLROM.DAT をダンプします
+;    n : $FC0000-$FC1FFF SCSIINROM.DAT が存在したらダンプします
+;    x : $EA0020-$EA1FFF SCSIEXROM.DAT が存在したらダンプします
+;    a : 上記全てをダンプします
 ;
-;  �ȉ��̃_���v�t�@�C�����쐬����v���O�����ł�
+;  以下のダンプファイルを作成するプログラムです
 ;   $F00000-$FFFFFF X68KROM.DAT
 ;   $F00000-$FBFFFF CGROM.DAT
-;   $FC0000-$FDFFFF ROM30.DAT (���݂���ꍇ�̂�)
+;   $FC0000-$FDFFFF ROM30.DAT (存在する場合のみ)
 ;   $FE0000-$FFFFFF IPLROM.DAT
-;   $FC0000-$FC1FFF SCSIINROM.DAT (���݂���ꍇ�̂�)
-;   $EA0020-$EA1FFF SCSIEXROM.DAT (���݂���ꍇ�̂�)
+;   $FC0000-$FC1FFF SCSIINROM.DAT (存在する場合のみ)
+;   $EA0020-$EA1FFF SCSIEXROM.DAT (存在する場合のみ)
 ;
 ;===============================================================================
 
@@ -39,93 +39,93 @@ main:
 
 title:
     
-    move.w  #$0006,d0                  ; $6 = $2(���F) + $4(����)
-    lea.l   mes_title,a0               ; �^�C�g��
+    move.w  #$0006,d0                  ; $6 = $2(黄色) + $4(太字)
+    lea.l   mes_title,a0               ; タイトル
     bsr     cprint
 
-    move.w  #$0007,d0                  ; $7 = $3(��)   + $4(����)
-    lea.l   mes_version,a0             ; �o�[�W����
+    move.w  #$0007,d0                  ; $7 = $3(白)   + $4(太字)
+    lea.l   mes_version,a0             ; バージョン
     bsr     cprint
 
-    move.w  #$0003,d0                  ; $3(��)
+    move.w  #$0003,d0                  ; $3(白)
     lea.l   mes_by,a0                  ; by
     bsr     cprint
 
-    move.w  #$0007,d0                  ; $7 = $3(��)   + $4(����)
-    lea.l   mes_author,a0              ; ���
+    move.w  #$0007,d0                  ; $7 = $3(白)   + $4(太字)
+    lea.l   mes_author,a0              ; 作者
     bsr     cprint
 
-    move.w  #$0003,d0                  ; $3(��)
+    move.w  #$0003,d0                  ; $3(白)
     lea.l   mes_nul,a0
     bsr     cprint
 
 ;===============================================================================
 
-arg_check:                             ; �R�}���h���C�������̃`�F�b�N
-    addq.l  #1,a2                      ; �����̃T�C�Y�͖���
+arg_check:                             ; コマンドライン引数のチェック
+    addq.l  #1,a2                      ; 引数のサイズは無視
 
-arg_skip:
-    move.b  (a2)+,d0
-    cmpi.b  #' ',d0                    ; �X�y�[�X���ȁH
-    beq     arg_skip                   ; �X�y�[�X�̓X�L�b�v
-    ori.b   #$20,d0                    ; �p����������
-    cmpi.b  #'c',d0                    ; 'c' ���ȁH
-    beq     option_CGROM               ; 'c' �� CGROM.DAT
-    cmpi.b  #'3',d0                    ; '3' ���ȁH
-    beq     option_ROM30               ; '3' �� ROM30.DAT
-    cmpi.b  #'i',d0                    ; 'i' ���ȁH
-    beq     option_IPLROM              ; 'i' �� IPLROM.DAT
-    cmpi.b  #'n',d0                    ; 'n' ���ȁH
-    beq     option_SCSIINROM           ; 'n' �� SCSIINROM.DAT
-    cmpi.b  #'x',d0                    ; 'x' ���ȁH
-    beq     option_SCSIEXROM           ; 'x' �� SCSIEXROM.DAT
-    cmpi.b  #'f',d0                    ; 'f' ���ȁH
-    beq     option_X68KROM             ; 'f' �� X68KROM.DAT
-    cmpi.b  #'a',d0                    ; 'a' ���ȁH
-    beq     option_all                 ; 'a' �� �SROM
+arg_loop:                              ; コマンドライン引数処理ルーチン
+    move.b  (a2)+,d0                   ; 引数を１文字フェッチ
+    cmpi.b  #' ',d0                    ; スペースかな？
+    beq     arg_loop                   ; スペース なら スキップ
+    ori.b   #$20,d0                    ; 英字小文字化
+    cmpi.b  #'c',d0                    ; 'c' かな？
+    beq     option_CGROM               ; 'c' なら CGROM.DAT 指定
+    cmpi.b  #'3',d0                    ; '3' かな？
+    beq     option_ROM30               ; '3' なら ROM30.DAT 指定
+    cmpi.b  #'i',d0                    ; 'i' かな？
+    beq     option_IPLROM              ; 'i' なら IPLROM.DAT 指定
+    cmpi.b  #'n',d0                    ; 'n' かな？
+    beq     option_SCSIINROM           ; 'n' なら SCSIINROM.DAT 指定
+    cmpi.b  #'x',d0                    ; 'x' かな？
+    beq     option_SCSIEXROM           ; 'x' なら SCSIEXROM.DAT 指定
+    cmpi.b  #'f',d0                    ; 'f' かな？
+    beq     option_X68KROM             ; 'f' なら X68KROM.DAT 指定
+    cmpi.b  #'a',d0                    ; 'a' かな？
+    beq     option_all                 ; 'a' なら 全ROM 指定
 
-    bra     option_check
+    bra     option_check               ; 引数チェックへ
 
 option_CGROM:
-    ori.b   #$01, flg_option
-    bra     arg_skip
+    ori.b   #$01, flg_option           ; CGROM 指定オプションを立てる
+    bra     arg_loop                   ; 引数処理へ戻る
 
 option_ROM30:
-    ori.b   #$02, flg_option
-    bra     arg_skip
+    ori.b   #$02, flg_option           ; ROM30 指定オプションを立てる
+    bra     arg_loop                   ; 引数処理へ戻る
 
 option_IPLROM:
-    ori.b   #$04, flg_option
-    bra     arg_skip
+    ori.b   #$04, flg_option           ; IPLROM 指定オプションを立てる
+    bra     arg_loop                   ; 引数処理へ戻る
 
 option_SCSIINROM:
-    ori.b   #$10, flg_option
-    bra     arg_skip
+    ori.b   #$10, flg_option           ; SCSIINROM 指定オプションを立てる
+    bra     arg_loop                   ; 引数処理へ戻る
 
 option_SCSIEXROM:
-    ori.b   #$20, flg_option
-    bra     arg_skip
+    ori.b   #$20, flg_option           ; SCSIEXROM 指定オプションを立てる
+    bra     arg_loop                   ; 引数処理へ戻る
 
 option_X68KROM:
-    ori.b   #$80, flg_option
-    bra     arg_skip
+    ori.b   #$80, flg_option           ; X68KROM 指定オプションを立てる
+    bra     arg_loop                   ; 引数処理へ戻る
 
-option_all:
+option_all:                            ; 全ROM 指定オプションを立てる
     ori.b   #$B7, flg_option
-    bra     arg_skip
+    bra     arg_loop                   ; 引数処理へ戻る
 
 option_check:
-    tst.b   flg_option
-    bne     arg_end
+    tst.b   flg_option                 ; 引数指定確認
+    bne     arg_end                    ; 指定されてたらメインルーチンへ
 
 ;-------------------------------------------------------------------------------
 
 help:
-    pea.l   mes_help
-    DOS     _PRINT
+    pea.l   mes_help                   ; ヘルプメッセージ
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
 
-    DOS     _EXIT
+    DOS     _EXIT                      ; 終了
 
 
 arg_end:
@@ -133,166 +133,166 @@ arg_end:
 ;===============================================================================
 
 SUPERVISORMODE:
-    clr.l   -(sp)                      ; �X�[�p�[�o�C�U�[���[�h
+    clr.l   -(sp)                      ; スーパーバイザーモード
     DOS     _SUPER
-    or.l    d0,d0                      ; ���� SSP �A�h���X��
-    bpl     @f                         ; �������擾�ł����琬���Ȃ̂Ŏ���
+    or.l    d0,d0                      ; 元の SSP アドレスが
+    bpl     @f                         ; 正しく取得できたら成功なので次へ
 
 ;-------------------------------------------------------------------------------
 
-    pea.l   mes_error                  ; �\�����ʓ�G���[
-    DOS     _PRINT
+    pea.l   mes_error                  ; 予期せぬ謎エラー
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
 
-    DOS     _EXIT
+    DOS     _EXIT                      ; 終了
 
 @@:
 
 ;-------------------------------------------------------------------------------
 
-    move.l  d0, (sp)                   ; SUPER VISOR ���[�h�ɂȂꂽ�̂� SSP �ۑ�
+    move.l  d0, (sp)                   ; SUPER VISOR モードになれたので SSP 保存
 
 ;===============================================================================
 
 X68KROM:
-    btst.b  #7, flg_option
-    beq     @f
+    btst.b  #7, flg_option             ; X68KROM 指定オプションを確認
+    beq     @f                         ; 指定されてなければ次へ
 
-    move.l  #$F00000,d0                ; X68KROM �̐擪�A�h���X
-    move.l  #$100000,d1                ; X68KROM �̃T�C�Y
-    move.l  #filename_X68KROM,d2       ; X68KROM �̃t�@�C����
-    bsr     dump                       ; �_���v
+    move.l  #$F00000,d0                ; X68KROM の先頭アドレス
+    move.l  #$100000,d1                ; X68KROM のサイズ
+    move.l  #filename_X68KROM,d2       ; X68KROM のファイル名
+    bsr     dump                       ; ダンプ
 
 @@:
 
 ;-------------------------------------------------------------------------------
 
 CGROM:
-    btst.b  #0, flg_option
-    beq     @f
+    btst.b  #0, flg_option             ; CGROM 指定プションを確認
+    beq     @f                         ; 指定されてなければ次へ
 
-    move.l  #$F00000,d0                ; CGROM �̐擪�A�h���X
-    move.l  #$0C0000,d1                ; CGROM �̃T�C�Y
-    move.l  #filename_CGROM,d2         ; X68KROM �̃t�@�C����
-    bsr     dump                       ; �_���v
+    move.l  #$F00000,d0                ; CGROM の先頭アドレス
+    move.l  #$0C0000,d1                ; CGROM のサイズ
+    move.l  #filename_CGROM,d2         ; X68KROM のファイル名
+    bsr     dump                       ; ダンプ
 
 @@:
 
 ;-------------------------------------------------------------------------------
 
 IPLROM:
-    btst.b  #2, flg_option
-    beq     @f
+    btst.b  #2, flg_option             ; IPLROM 指定オプションを確認
+    beq     @f                         ; 指定されてなければ次へ
 
-    move.l  #$FE0000,d0                ; IPLROM �̐擪�A�h���X
-    move.l  #$020000,d1                ; IPLROM �̃T�C�Y
-    move.l  #filename_IPLROM,d2        ; IPLROM �̃t�@�C����
-    bsr     dump                       ; �_���v
+    move.l  #$FE0000,d0                ; IPLROM の先頭アドレス
+    move.l  #$020000,d1                ; IPLROM のサイズ
+    move.l  #filename_IPLROM,d2        ; IPLROM のファイル名
+    bsr     dump                       ; ダンプ
 
 @@:
 
 ;-------------------------------------------------------------------------------
 
 ROM30:
-    btst.b  #1, flg_option
-    beq     SCSIINROM
+    btst.b  #1, flg_option             ; ROM30 指定オプションを確認
+    beq     @f                         ; 指定されてなければ次へ
 
-    movea.l #$00FC023C,a0              ; IPLROM 1.5 �� ROM30 Human �`�F�b�N
+    movea.l #$00FC023C,a0              ; IPLROM 1.5 の ROM30 Human チェック
     cmpi.l  #'uman',(a0)
     beq     ROM30_dump
 
-    movea.l #$00FC203C,a0              ; IPLROM 1.6 �� ROM30 Human �`�F�b�N
+    movea.l #$00FC203C,a0              ; IPLROM 1.6 の ROM30 Human チェック
     cmpi.l  #'uman',(a0)
-    beq     ROM30_dump                 ; ROM30 Human ���݂������̂Ń_���v
+    beq     ROM30_dump                 ; ROM30 Human がみつかったのでダンプ
 
-    pea.l   filename_ROM30             ; �t�@�C���� 
-    DOS     _PRINT
+    pea.l   filename_ROM30             ; ファイル名 
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
-    pea.l   mes_santen                 ; �O�_���[�_�[
-    DOS     _PRINT
+    pea.l   mes_santen                 ; 三点リーダー
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
-    pea.l   mes_dontexist              ; ���݂��܂���ł���
-    DOS     _PRINT
+    pea.l   mes_dontexist              ; 存在しませんでした
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
 
-    bra     @f                         ; ����
+    bra     @f                         ; 次へ
 
 ROM30_dump:
-    move.l  #$FC0000,d0                ; ROM30 �̐擪�A�h���X
-    move.l  #$020000,d1                ; ROM30 �̃T�C�Y
-    move.l  #filename_ROM30,d2         ; ROM30 �̃t�@�C����
-    bsr     dump                       ; �_���v
-    bra     @@f
+    move.l  #$FC0000,d0                ; ROM30 の先頭アドレス
+    move.l  #$020000,d1                ; ROM30 のサイズ
+    move.l  #filename_ROM30,d2         ; ROM30 のファイル名
+    bsr     dump                       ; ダンプ
+;   bra     @@f
 
 @@:
 
 ;-------------------------------------------------------------------------------
 
 SCSIINROM:
-    btst.b  #4, flg_option
-    beq     @f
+    btst.b  #4, flg_option             ; SCSIINROM 指定オプションを確認
+    beq     @f                         ; 指定されてなければ次へ
 
-    movea.l #$00FC0024,a0
+    movea.l #$00FC0024,a0              ; SCSIINROM 存在チェック
     cmpi.l  #'SCSI',(a0)
-    beq     SCSIINROM_dump             ; SCSIINROM �����݂���΃_���v
+    beq     SCSIINROM_dump             ; SCSIINROM が存在すればダンプ
 
-    pea.l   filename_SCSIINROM         ; �t�@�C���� 
-    DOS     _PRINT
+    pea.l   filename_SCSIINROM         ; ファイル名
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
-    pea.l   mes_santen                 ; �O�_���[�_�[
-    DOS     _PRINT
+    pea.l   mes_santen                 ; 三点リーダー
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
-    pea.l   mes_dontexist              ; ���݂��܂���ł���
-    DOS     _PRINT
+    pea.l   mes_dontexist              ; 存在しませんでした
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
 
-    bra     @f                         ; ����
+    bra     @f                         ; 次へ
 
 SCSIINROM_dump
-    move.l  #$FC0000,d0                ; SCSIINROM �̐擪�A�h���X
-    move.l  #$002000,d1                ; SCSIINROM �̃T�C�Y
-    move.l  #filename_SCSIINROM,d2     ; SCSIINROM �̃t�@�C����
-    bsr     dump                       ; �_���v
+    move.l  #$FC0000,d0                ; SCSIINROM の先頭アドレス
+    move.l  #$002000,d1                ; SCSIINROM のサイズ
+    move.l  #filename_SCSIINROM,d2     ; SCSIINROM のファイル名
+    bsr     dump                       ; ダンプ
 
 @@:
 
 ;-------------------------------------------------------------------------------
 
 SCSIEXROM:
-    btst.b  #5, flg_option
-    beq     @f
+    btst.b  #5, flg_option             ; SCSIEXROM 指定オプションを確認
+    beq     @f                         ; 指定されてなければ次へ
 
 BUSERROR_hook:
-    move.l  sp,a2                      ; sp��ޔ�
-    move.l  $0008.w,a1                 ; �o�X�G���[�̃x�N�^��ޔ�
-    lea.l   BUSERROR_resume(pc),a0     ; �x�N�^�̃t�b�N��
-    move.l  a0,$0008.w                 ; �o�X�G���[�̃x�N�^�t�b�N
+    move.l  sp,a2                      ; spを退避
+    move.l  $0008.w,a1                 ; バスエラーのベクタを退避
+    lea.l   BUSERROR_resume(pc),a0     ; ベクタの変更先アドレス
+    move.l  a0,$0008.w                 ; バスエラーのベクタを書き換え
 
-    moveq.l #0, d2                     ; �t�@�C�����A�h���X�i�[�p�� d2 ���W�X�^��������
+    moveq.l #0, d2                     ; ファイル名アドレス格納用の d2 レジスタを初期化
     movea.l #$00EA0044,a0
-    cmpi.l  #'SCSI',(a0)               ; SCSI�{�[�h���������Ă��Ȃ��ꍇ�̓o�X�G���[�ŃX�L�b�v
-    bne     BUSERROR_resume            ; SCSIEXROM ��F���ł��Ȃ��ꍇ���X�L�b�v
+    cmpi.l  #'SCSI',(a0)               ; SCSIボードがささっていない場合はバスエラーでスキップ
+    bne     BUSERROR_resume            ; SCSIEXROM を認識できない場合もスキップ
 
-    move.l  #$00EA0020,d0              ; SCSIEXROM �̐擪�A�h���X
-    move.l  #$001FE0,d1                ; SCSIEXROM �̃T�C�Y
-    move.l  #filename_SCSIEXROM,d2     ; SCSIEXROM �̃t�@�C����
-    bsr     dump                       ; �_���v
+    move.l  #$00EA0020,d0              ; SCSIEXROM の先頭アドレス
+    move.l  #$001FE0,d1                ; SCSIEXROM のサイズ
+    move.l  #filename_SCSIEXROM,d2     ; SCSIEXROM のファイル名
+    bsr     dump                       ; ダンプ
 
 BUSERROR_resume:
-    move.l  a2,sp                      ; sp�𕜌�
-    move.l  a1,$0008.w                 ; �o�X�G���[�̃x�N�^�𕜌�
+    move.l  a2,sp                      ; spを復元
+    move.l  a1,$0008.w                 ; バスエラーのベクタを復元
 
-    tst.l   d2                         ; �t�@�C�����͎w�肳��Ă��邩�ȁH��SCSIEXROM�͑��݂��Ă����ȁH
-    bne     @f                         ; SCSIEXROM �����݂��Ă����̂Ŏ���
+    tst.l   d2                         ; ファイル名は指定されているかな？＝SCSIEXROMは存在してたかな？
+    bne     @f                         ; SCSIEXROM が存在していたので次へ
 
-    pea.l   filename_SCSIEXROM         ; �t�@�C���� 
-    DOS     _PRINT
+    pea.l   filename_SCSIEXROM         ; ファイル名 
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
-    pea.l   mes_santen                 ; �O�_���[�_�[
-    DOS     _PRINT
+    pea.l   mes_santen                 ; 三点リーダー
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
-    pea.l   mes_dontexist              ; ���݂��܂���ł���
-    DOS     _PRINT
+    pea.l   mes_dontexist              ; 存在しませんでした
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
 
 @@:
@@ -300,15 +300,15 @@ BUSERROR_resume:
 ;===============================================================================
 
 USERMODE:
-    DOS     _SUPER
+    DOS     _SUPER                     ; ユーザーモードへ
     addq.l  #4,sp
 
 complete:
-    pea.l   mes_crlf
-    DOS     _PRINT
+    pea.l   mes_crlf                   ; 改行コード
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
 
-    DOS     _EXIT
+    DOS     _EXIT                      ; 終了
 
 ;===============================================================================
 
@@ -327,34 +327,34 @@ cprint:
 ;===============================================================================
 
 dump:
-    move.l  d1,-(sp)                   ; �J�n�A�h���X
-    move.l  d0,-(sp)                   ; �T�C�Y
-    clr.w   -(sp)                      ; �t�@�C������(�쐬��̓t�@�C���n���h��)
-    move.l  d2,-(sp)                   ; �t�@�C����
+    move.l  d1,-(sp)                   ; 開始アドレス
+    move.l  d0,-(sp)                   ; サイズ
+    clr.w   -(sp)                      ; ファイル属性(作成後はファイルハンドル)
+    move.l  d2,-(sp)                   ; ファイル名
     DOS     _PRINT
-    pea.l   mes_santen                 ; �O�_���[�_�[
-    DOS     _PRINT
+    pea.l   mes_santen                 ; 三点リーダー
+    DOS     _PRINT                     ; 表示
     addq.l  #4,sp
     DOS     _CREATE
-    or.l    d0,d0                      ; �t�@�C���n���h����
-    bmi     dump_failure               ; ���Ȃ�쐬���s
+    or.l    d0,d0                      ; ファイルハンドルが
+    bmi     dump_failure               ; 負なら作成失敗
 
 dump_success:
     addq.l  #4,sp
-    move.w  d0,(sp)                    ; �t�@�C���n���h��(_CREATE �̕Ԃ�l)
-    DOS     _WRITE
+    move.w  d0,(sp)                    ; ファイルハンドル(_CREATE の返り値)
+    DOS     _WRITE                     ; 書き込み
     DOS     _CLOSE
-    pea.l   mes_create
-    DOS     _PRINT
+    pea.l   mes_create                 ; ファイル作成完了メッセージ
+    DOS     _PRINT                     ; 表示
     lea.l   14(sp),sp
-    moveq.l #0, d0                     ; �������̕Ԃ�l d0 : 0
+    moveq.l #0, d0                     ; 成功時の返り値 d0 : 0
     rts
 
-dump_failure:                          ; �쐬���s
-    pea.l   mes_cantcreate
-    DOS     _PRINT
+dump_failure:                          ; 作成失敗
+    pea.l   mes_cantcreate             ; ファイル作成失敗メッセージ
+    DOS     _PRINT                     ; 表示
     lea.l   18(sp),sp
-    moveq.l #-1,d0                     ; ���s���̕Ԃ�l d0 : -1
+    moveq.l #-1,d0                     ; 失敗時の返り値 d0 : -1
     rts
 ;===============================================================================
 
@@ -386,33 +386,33 @@ filename_SCSIINROM:
 filename_SCSIEXROM:
     .dc.b   'SCSIEXROM.DAT',$00
 mes_santen:
-    .dc.b   ' �c ',$00
+    .dc.b   ' … ',$00
 mes_create:
-    .dc.b   '�쐬�����ł��R(=�L��`=)�',$0D,$0A,$00
+    .dc.b   '作成完了ですヽ(=´▽`=)ﾉ',$0D,$0A,$00
 mes_cantcreate:
-    .dc.b   '�쐬�ł��܂���ł���(T�tT)',$0D,$0A,$00
+    .dc.b   '作成できませんでした(TдT)',$0D,$0A,$00
 mes_dontexist:
-    .dc.b   '���݂��܂���ł���(T�tT)',$0D,$0A,$00
+    .dc.b   '存在しませんでした(TдT)',$0D,$0A,$00
 mes_error:
-    .dc.b   '�ċN�����Ă�����߂Ă��������������܂��I',$0D,$0A,$0D,$0A,$00
+    .dc.b   '再起動してから改めてお試しくださいませ！',$0D,$0A,$0D,$0A,$00
 mes_title:
     .dc.b   'ROMDump ',$00
 mes_version:
-    .dc.b   $F3,'v',$F3,'e',$F3,'r',$F3,'s',$F3,'i',$F3,'o',$F3,'n',$F3,' ',$F3,'1',$F3,'.',$F3,'2',$F3,'1',$00
+    .dc.b   $F3,'v',$F3,'e',$F3,'r',$F3,'s',$F3,'i',$F3,'o',$F3,'n',$F3,' ',$F3,'1',$F3,'.',$F3,'2',$F3,'5',$00
 mes_by:
     .dc.b   ' ',$F3,'b',$F3,'y ',$00
 mes_author:
-    .dc.b   '�݂� (miyu rose)',$0D,$0A,$0D,$0A,$00
+    .dc.b   'みゆ (miyu rose)',$0D,$0A,$0D,$0A,$00
 mes_help:
     .dc.b   ' ROMDump.x ([options])',$0D,$0A
     .dc.b   '  [options]:',$0D,$0A
-    .dc.b   '   f : $F00000-$FFFFFF   X68KROM.DAT ���_���v���܂�',$0D,$0A
-    .dc.b   '   c : $F00000-$FBFFFF     CGROM.DAT ���_���v���܂�',$0D,$0A
-    .dc.b   '   3 : $FC0000-$FDFFFF     ROM30.DAT �����݂�����_���v���܂�',$0D,$0A
-    .dc.b   '   i : $FE0000-$FFFFFF    IPLROM.DAT ���_���v���܂�',$0D,$0A
-    .dc.b   '   n : $FC0000-$FC1FFF SCSIINROM.DAT �����݂�����_���v���܂�',$0D,$0A
-    .dc.b   '   x : $EA0020-$EA1FFF SCSIEXROM.DAT �����݂�����_���v���܂�',$0D,$0A
-    .dc.b   '   a : ��L�S�Ă��_���v���܂�',$0D,$0A
+    .dc.b   '   f : $F00000-$FFFFFF   X68KROM.DAT をダンプします',$0D,$0A
+    .dc.b   '   c : $F00000-$FBFFFF     CGROM.DAT をダンプします',$0D,$0A
+    .dc.b   '   3 : $FC0000-$FDFFFF     ROM30.DAT が存在したらダンプします',$0D,$0A
+    .dc.b   '   i : $FE0000-$FFFFFF    IPLROM.DAT をダンプします',$0D,$0A
+    .dc.b   '   n : $FC0000-$FC1FFF SCSIINROM.DAT が存在したらダンプします',$0D,$0A
+    .dc.b   '   x : $EA0020-$EA1FFF SCSIEXROM.DAT が存在したらダンプします',$0D,$0A
+    .dc.b   '   a : 上記全てをダンプします',$0D,$0A
 mes_crlf:
     .dc.b   $0D,$0A
 mes_nul:
